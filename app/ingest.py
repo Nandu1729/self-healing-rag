@@ -1,48 +1,79 @@
+"""
+Ingest documents into ChromaDB.
+
+Usage:
+    python app/ingest.py                  # loads all PDFs from data/
+    python app/ingest.py data/myfile.pdf  # loads a specific file
+"""
+
+import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
 
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
 
-import os
+DATA_DIR = "data"
+CHROMA_DIR = "chroma_db"
+EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
+SKIP_SECTIONS = ["REFERENCES", "BIBLIOGRAPHY"]
 
-# Load PDF
-loader = PyPDFLoader("data/B19_RP.pdf")
-docs = loader.load()
-cleaned_docs = []
 
-for doc in docs:
+def load_docs(path: str) -> list:
+    if os.path.isfile(path):
+        print(f"Loading: {path}")
+        loader = PyPDFLoader(path)
+        return loader.load()
 
-    text = doc.page_content
+    print(f"Loading all PDFs from: {path}/")
+    loader = DirectoryLoader(path, glob="**/*.pdf", loader_cls=PyPDFLoader)
+    return loader.load()
 
-    # Skip references-heavy pages
-    if "REFERENCES" in text:
-        continue
 
-    cleaned_docs.append(doc)
+def clean(docs: list) -> list:
+    cleaned = []
+    for doc in docs:
+        if any(sec in doc.page_content for sec in SKIP_SECTIONS):
+            continue
+        if len(doc.page_content.strip()) < 50:
+            continue
+        cleaned.append(doc)
+    return cleaned
 
-docs = cleaned_docs
 
-# Split into chunks
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
-)
+def ingest(path: str = DATA_DIR):
+    print("\n Self-Healing RAG — Document Ingestion")
+    print("─" * 40)
 
-chunks = splitter.split_documents(docs)
+    docs = load_docs(path)
+    docs = clean(docs)
+    print(f"Pages loaded : {len(docs)}")
 
-# Create embeddings
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP
+    )
+    chunks = splitter.split_documents(docs)
+    print(f"Chunks created: {len(chunks)}")
 
-# Store in ChromaDB
-vectorstore = Chroma.from_documents(
-    documents=chunks,
-    embedding=embeddings,
-    persist_directory="chroma_db"
-)
+    print("Generating embeddings...")
+    embeddings = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
-print("Documents embedded successfully!")
+    Chroma.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        persist_directory=CHROMA_DIR
+    )
+
+    print(f"Stored in    : {CHROMA_DIR}/")
+    print("Done!\n")
+
+
+if __name__ == "__main__":
+    target = sys.argv[1] if len(sys.argv) > 1 else DATA_DIR
+    ingest(target)

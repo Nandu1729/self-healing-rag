@@ -1,26 +1,30 @@
-from langchain_ollama import ChatOllama
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-llm = ChatOllama(model="phi3")
+from langchain_groq import ChatGroq
+
+llm = ChatGroq(
+    model="llama3-8b-8192",
+    temperature=0,
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
 
 def critic(state):
-
     question = state["question"]
     docs = state["documents"]
     answer = state["answer"]
 
-    context = "\n\n".join([
-        doc.page_content for doc in docs
-    ])
+    context = "\n\n".join([doc.page_content for doc in docs])
 
-    prompt = f'''
-You are a strict evaluator.
+    prompt = f"""You are a strict fact-checker.
 
-Check whether the answer is supported
-by the provided context.
+Decide if the answer is fully supported by the context.
+If the answer contains any information NOT in the context, reply FAIL.
+If the answer is fully grounded in the context, reply PASS.
 
-Question:
-{question}
+Question: {question}
 
 Context:
 {context}
@@ -28,24 +32,11 @@ Context:
 Answer:
 {answer}
 
-IMPORTANT:
-Return ONLY one word.
-
-PASS
-or
-FAIL
-
-Do not explain.
-Do not add markdown.
-'''
+Reply with ONLY one word — PASS or FAIL. Nothing else."""
 
     response = llm.invoke(prompt)
 
-    grade = response.content.strip().upper()
+    raw = response.content.strip().upper().replace("*", "").replace(".", "")
+    grade = "PASS" if "PASS" in raw else "FAIL"
 
-    # Remove markdown symbols if model adds them
-    grade = grade.replace("*", "")
-
-    return {
-        "grade": grade
-    }
+    return {"grade": grade}
