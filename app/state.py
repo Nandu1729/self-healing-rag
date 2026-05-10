@@ -7,3 +7,4 @@ class GraphState(TypedDict):
     answer: str
     grade: str
     retry_count: int
+    relevant: bool

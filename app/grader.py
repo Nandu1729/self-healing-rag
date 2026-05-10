@@ -11,32 +11,33 @@ llm = ChatGroq(
 )
 
 
-def critic(state):
+def grade_documents(state):
+    """
+    Check if the retrieved documents are actually relevant
+    to the question before wasting a generation call.
+    """
     question = state["question"]
     docs = state["documents"]
-    answer = state["answer"]
+
+    if not docs:
+        return {"relevant": False}
 
     context = "\n\n".join([doc.page_content for doc in docs])
 
-    prompt = f"""You are a strict fact-checker.
+    prompt = f"""You are a relevance checker.
 
-Decide if the answer is fully supported by the context.
-If the answer contains any information NOT in the context, reply FAIL.
-If the answer is fully grounded in the context, reply PASS.
+Does the context contain information useful for answering the question?
+Reply with ONLY one word: YES or NO.
 
 Question: {question}
 
 Context:
 {context}
 
-Answer:
-{answer}
-
-Reply with ONLY one word — PASS or FAIL. Nothing else."""
+Answer:"""
 
     response = llm.invoke(prompt)
-
     raw = response.content.strip().upper().replace("*", "").replace(".", "")
-    grade = "PASS" if "PASS" in raw else "FAIL"
+    relevant = "YES" in raw
 
-    return {"grade": grade}
+    return {"relevant": relevant}
