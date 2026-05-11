@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  eval:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run RAG Pipeline Tests
-        run: python test.py
+      - name: Run RAG Eval Pipeline
+        run: python eval.py
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
